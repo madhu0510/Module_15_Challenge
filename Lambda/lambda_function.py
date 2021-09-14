@@ -12,6 +12,15 @@ def parse_int(n):
     except ValueError:
         return float("nan")
 
+### Functionality Helper Functions ###
+def parse_float(n):
+    """
+    Securely converts a non-numeric value to float.
+    """
+    try:
+        return float(n)
+    except ValueError:
+        return float("nan")
 
 def build_validation_result(is_valid, violated_slot, message_content):
     """
@@ -123,8 +132,96 @@ def recommend_portfolio(intent_request):
     investment_amount = get_slots(intent_request)["investmentAmount"]
     risk_level = get_slots(intent_request)["riskLevel"]
     source = intent_request["invocationSource"]
+    
+     # Gets the invocation source, for Lex dialogs "DialogCodeHook" is expected.
+    source = intent_request["invocationSource"]  #
 
-    # YOUR CODE GOES HERE!
+    if source == "DialogCodeHook":
+        # Gets all the slots
+        slots = get_slots(intent_request)
+    
+        # Validate Data
+        validation_result = validate_data(age,investment_amount,intent_request)
+    
+        if not validation_result["isValid"]:
+            slots[validation_result["violatedSlot"]] = None  
+    
+            # Returns an elicitSlot dialog to request new data for the invalid slot
+            return elicit_slot(
+                intent_request["sessionAttributes"],
+                intent_request["currentIntent"]["name"],
+                slots,
+                validation_result["violatedSlot"],
+                validation_result["message"],
+            )
+        # Fetch current session attributes
+        output_session_attributes = intent_request["sessionAttributes"]
+    
+        # Once all slots are valid, a delegate dialog is returned to Lex to choose the next course of action.
+        return delegate(output_session_attributes, get_slots(intent_request))
+
+    # Get Portofolio recommendations based on selected risk
+    portfolio_recommendation = get_recommendations(risk_level.lower())
+    
+    return close(
+        intent_request["sessionAttributes"],
+        "Fulfilled",
+        {
+            "contentType": "PlainText",
+            "content": "{}".format(
+                portfolio_recommendation
+            ),
+        },
+    )
+
+
+
+###  Get Portfolio recommendations based on risk level  ###
+def get_recommendations(risk_level):
+    # **none:** "100% bonds (AGG), 0% equities (SPY)"
+    # **low:** "60% bonds (AGG), 40% equities (SPY)"
+    # **medium:** "40% bonds (AGG), 60% equities (SPY)"
+    # **high:** "20% bonds (AGG), 80% equities (SPY)"
+    
+    if risk_level == "none":
+        return "100% bonds (AGG), 0% equities (SPY)"
+    elif risk_level == "low":
+        return "60% bonds (AGG), 40% equities (SPY)"
+    elif risk_level == "medium":
+        return "40% bonds (AGG), 60% equities (SPY)"
+    elif risk_level == "high":
+        return "20% bonds (AGG), 80% equities (SPY)"
+
+    
+
+###  Validate the input data  ###
+def validate_data(age,investment_amount,intent_request):
+    # Validate age
+    if age is not None:
+        age = parse_int(
+            age
+            )
+        if age <= 0 or age > 65:
+            return build_validation_result(
+            False,
+            "age",
+            "You age should be greater than 0 and below 65 years to get recommendations.  Please provide a valid age."
+            )
+    
+    # Validate investment amount
+    if investment_amount is not None:
+        investment_amount = parse_float(
+            investment_amount
+        )
+        if investment_amount < 5000:
+            return build_validation_result(
+            False,
+            "investmentAmount",
+            "Investement amount should be atleast 5000 dollars to get recommendations. Please provide a valid amount in dollars."
+            )
+    
+    # A True results is returned if age or investment amount are valid
+    return build_validation_result(True, None, None)
 
 
 ### Intents Dispatcher ###
